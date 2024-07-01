@@ -31,17 +31,17 @@ namespace d3d11 {
 	class Context
 	{
 	public:
-		Context(ID3D11DeviceContext*);
+		Context(ID3D11DeviceContext1*);
 
 		void flush();
 
-		operator ID3D11DeviceContext*() {
+		operator ID3D11DeviceContext1*() {
 			return ctx_.get();
 		}
 
 	private:
 		
-		std::shared_ptr<ID3D11DeviceContext> const ctx_;
+		std::shared_ptr<ID3D11DeviceContext1> const ctx_;
 	};
 
 	//
@@ -50,7 +50,7 @@ namespace d3d11 {
 	class Device
 	{
 	public:
-		Device(ID3D11Device*, ID3D11DeviceContext*);
+		Device(ID3D11Device1*, ID3D11DeviceContext1*);
 
 		std::string adapter_name() const;
 
@@ -93,7 +93,7 @@ namespace d3d11 {
 
 		HMODULE _lib_compiler;
 
-		std::shared_ptr<ID3D11Device> const device_;
+		std::shared_ptr<ID3D11Device1> const device_;
 		std::shared_ptr<Context> const ctx_;
 	};
 

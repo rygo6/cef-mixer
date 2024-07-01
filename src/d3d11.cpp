@@ -14,7 +14,7 @@ namespace d3d11 {
 		DirectX::XMFLOAT2 tex;
 	};
 
-	Context::Context(ID3D11DeviceContext* ctx)
+	Context::Context(ID3D11DeviceContext1* ctx)
 		: ctx_(to_com_ptr(ctx))
 	{
 	}
@@ -40,7 +40,7 @@ namespace d3d11 {
 	void SwapChain::bind(shared_ptr<Context> const& ctx)
 	{
 		ctx_ = ctx;
-		ID3D11DeviceContext* d3d11_ctx = (ID3D11DeviceContext*)(*ctx_);
+		ID3D11DeviceContext1* d3d11_ctx = (ID3D11DeviceContext1*)(*ctx_);
 
 		ID3D11RenderTargetView* rtv[1] = { rtv_.get() };
 		d3d11_ctx->OMSetRenderTargets(1, rtv, nullptr);
@@ -67,7 +67,7 @@ namespace d3d11 {
 
 	void SwapChain::clear(float red, float green, float blue, float alpha)
 	{
-		ID3D11DeviceContext* d3d11_ctx = (ID3D11DeviceContext*)(*ctx_);
+		ID3D11DeviceContext1* d3d11_ctx = (ID3D11DeviceContext1*)(*ctx_);
 		assert(d3d11_ctx);
 
 		FLOAT color[4] = { red, green, blue, alpha };
@@ -85,7 +85,7 @@ namespace d3d11 {
 			return;
 		}
 
-		ID3D11DeviceContext* d3d11_ctx = (ID3D11DeviceContext*)(*ctx_);
+		ID3D11DeviceContext1* d3d11_ctx = (ID3D11DeviceContext1*)(*ctx_);
 		assert(d3d11_ctx);
 
 		d3d11_ctx->OMSetRenderTargets(0, 0, 0);
@@ -150,7 +150,7 @@ namespace d3d11 {
 	void Effect::bind(shared_ptr<Context> const& ctx)
 	{
 		ctx_ = ctx;
-		ID3D11DeviceContext* d3d11_ctx = (ID3D11DeviceContext*)(*ctx_);
+		ID3D11DeviceContext1* d3d11_ctx = (ID3D11DeviceContext1*)(*ctx_);
 
 		d3d11_ctx->IASetInputLayout(layout_.get());
 		d3d11_ctx->VSSetShader(vsh_.get(), nullptr, 0);
@@ -176,7 +176,7 @@ namespace d3d11 {
 	void Geometry::bind(shared_ptr<Context> const& ctx)
 	{
 		ctx_ = ctx;
-		ID3D11DeviceContext* d3d11_ctx = (ID3D11DeviceContext*)(*ctx_);
+		ID3D11DeviceContext1* d3d11_ctx = (ID3D11DeviceContext1*)(*ctx_);
 
 		// todo: handle offset
 		uint32_t offset = 0;
@@ -192,7 +192,7 @@ namespace d3d11 {
 
 	void Geometry::draw()
 	{
-		ID3D11DeviceContext* d3d11_ctx = (ID3D11DeviceContext*)(*ctx_);
+		ID3D11DeviceContext1* d3d11_ctx = (ID3D11DeviceContext1*)(*ctx_);
 		assert(d3d11_ctx);
 
 		// todo: handle offset
@@ -268,7 +268,7 @@ namespace d3d11 {
 	void Texture2D::bind(shared_ptr<Context> const& ctx)
 	{
 		ctx_ = ctx;
-		ID3D11DeviceContext* d3d11_ctx = (ID3D11DeviceContext*)(*ctx_);
+		ID3D11DeviceContext1* d3d11_ctx = (ID3D11DeviceContext1*)(*ctx_);
 		if (srv_)
 		{
 			ID3D11ShaderResourceView* views[1] = { srv_.get() };
@@ -287,7 +287,7 @@ namespace d3d11 {
 
 	void Texture2D::copy_from(shared_ptr<Texture2D> const& other)
 	{
-		ID3D11DeviceContext* d3d11_ctx = (ID3D11DeviceContext*)(*ctx_);
+		ID3D11DeviceContext1* d3d11_ctx = (ID3D11DeviceContext1*)(*ctx_);
 		assert(d3d11_ctx);
 		if (other) {
 			d3d11_ctx->CopyResource(texture_.get(), other->texture_.get());
@@ -300,7 +300,7 @@ namespace d3d11 {
 			return;
 		}
 
-		ID3D11DeviceContext* d3d11_ctx = (ID3D11DeviceContext*)(*ctx_);
+		ID3D11DeviceContext1* d3d11_ctx = (ID3D11DeviceContext1*)(*ctx_);
 		assert(d3d11_ctx);
 
 		D3D11_MAPPED_SUBRESOURCE res;
@@ -329,7 +329,7 @@ namespace d3d11 {
 		}
 	}
 
-	Device::Device(ID3D11Device* pdev, ID3D11DeviceContext* pctx)
+	Device::Device(ID3D11Device1* pdev, ID3D11DeviceContext1* pctx)
 		: device_(to_com_ptr(pdev))
 		, ctx_(make_shared<Context>(pctx))
 	{
@@ -474,7 +474,7 @@ namespace d3d11 {
 			return nullptr;
 		}
 
-		auto const ctx = (ID3D11DeviceContext*)(*ctx_);
+		auto const ctx = (ID3D11DeviceContext1*)(*ctx_);
 
 		ctx->OMSetRenderTargets(1, &rtv, nullptr);
 
@@ -576,8 +576,8 @@ namespace d3d11 {
 	shared_ptr<Texture2D> Device::open_shared_texture(void* handle)
 	{
 		ID3D11Texture2D* tex = nullptr;
-		auto hr = device_->OpenSharedResource(
-				handle, __uuidof(ID3D11Texture2D), (void**)(&tex));
+		//auto hr = device_->OpenSharedResource(handle, __uuidof(ID3D11Texture2D), (void**)(&tex));
+		auto hr = device_->OpenSharedResource1(handle, __uuidof(ID3D11Texture2D), (void**)(&tex));
 		if (FAILED(hr)) {
 			return nullptr;
 		}
@@ -872,7 +872,12 @@ float4 main(VS_OUTPUT input) : SV_Target
 		
 		if (SUCCEEDED(hr)) 
 		{
-			auto const dev = make_shared<Device>(pdev, pctx);
+			ID3D11Device1* pdev1 = nullptr;
+			ID3D11DeviceContext1* pctx1 = nullptr;
+			pdev->QueryInterface(__uuidof (ID3D11Device1), (void**)&pdev1);
+			pctx->QueryInterface(__uuidof (ID3D11DeviceContext1), (void**)&pctx1);
+
+			auto const dev = make_shared<Device>(pdev1, pctx1);
 
 			log_message("d3d11: selected adapter: %s\n", dev->adapter_name().c_str());
 

@@ -97,13 +97,15 @@ class MixerHandler :
 public:
 	MixerHandler(
 		CefRefPtr<CefBrowser> const& browser,
+		CefRefPtr<CefFrame> const& frame,
 		CefRefPtr<CefV8Context> const& context)
 		: browser_(browser)
+		, frame_(frame)
 		, context_(context)
 	{
 		auto window = context->GetGlobal();
 		auto const obj = CefV8Value::CreateObject(this, nullptr);
-		obj->SetValue("requestStats", V8_ACCESS_CONTROL_DEFAULT, V8_PROPERTY_ATTRIBUTE_NONE);
+		obj->SetValue("requestStats", V8_PROPERTY_ATTRIBUTE_NONE);
 		window->SetValue("mixer", obj, V8_PROPERTY_ATTRIBUTE_NONE);
 	}
 
@@ -144,8 +146,8 @@ public:
 
 			// notify the browser process that we want stats
 			auto message = CefProcessMessage::Create("mixer-request-stats");
-			if (message != nullptr && browser_ != nullptr) {
-				browser_->SendProcessMessage(PID_BROWSER, message);
+			if (message != nullptr && browser_ != nullptr && frame_ != nullptr) {
+				frame_->SendProcessMessage(PID_BROWSER, message);
 			}
 			return true;
 		}
@@ -157,6 +159,7 @@ public:
 private:
 
 	CefRefPtr<CefBrowser> const browser_;
+	CefRefPtr<CefFrame> const frame_;
 	CefRefPtr<CefV8Context> const context_;
 	CefRefPtr<CefV8Value> request_stats_;
 };
@@ -226,7 +229,7 @@ public:
 		CefRefPtr<CefFrame> frame,
 		CefRefPtr<CefV8Context> context) override
 	{
-		mixer_handler_ = new MixerHandler(browser, context);
+		mixer_handler_ = new MixerHandler(browser, frame, context);
 	}
 
 	//
@@ -484,6 +487,7 @@ public:
 
 	bool OnProcessMessageReceived(
 		CefRefPtr<CefBrowser> /*browser*/,
+		CefRefPtr<CefFrame> /*frame*/,
 		CefProcessId /*source_process*/,
 		CefRefPtr<CefProcessMessage> message) override
 	{
@@ -549,7 +553,7 @@ public:
 		CefRefPtr<CefBrowser> /*browser*/,
 		PaintElementType type,
 		const RectList& dirtyRects,
-		void* share_handle) override
+		const CefAcceleratedPaintInfo& info) override
 	{
 		if (type == PET_VIEW)
 		{
@@ -560,7 +564,7 @@ public:
 			}
 			
 			if (view_buffer_) {
-				view_buffer_->on_gpu_paint((void*)share_handle);
+				view_buffer_->on_gpu_paint((void*)info.shared_texture_handle);
 			}
 			
 			if ((now - fps_start_) > 1000000)
@@ -582,7 +586,7 @@ public:
 			// metrics for the view
 
 			if (popup_buffer_) {
-				popup_buffer_->on_gpu_paint((void*)share_handle);
+				popup_buffer_->on_gpu_paint((void*)info.shared_texture_handle);
 			}
 		}
 	}
@@ -671,6 +675,7 @@ public:
 		CefWindowInfo& window_info,
 		CefRefPtr<CefClient>& client,
 		CefBrowserSettings& settings,
+		CefRefPtr<CefDictionaryValue>& extra_info,
 		bool* no_javascript_access) override 
 	{
 		shared_ptr<Composition> composition;
@@ -705,6 +710,7 @@ public:
 			view,
 			target_url,
 			settings,
+			extra_info,
 			nullptr);
 
 		// create a new layer to handle drawing for the web popup
@@ -788,7 +794,7 @@ public:
 
 		args->SetDictionary(0, dict);
 
-		browser->SendProcessMessage(PID_RENDERER, message);
+		browser.get()->GetMainFrame()->SendProcessMessage(PID_RENDERER, message);
 	}
 
 	void resize(int width, int height)
@@ -833,10 +839,10 @@ public:
 			CefWindowInfo windowInfo;
 			windowInfo.SetAsPopup(nullptr, "Developer Tools");
 			windowInfo.style = WS_VISIBLE | WS_OVERLAPPEDWINDOW;
-			windowInfo.x = 0;
-			windowInfo.y = 0;
-			windowInfo.width = 640;
-			windowInfo.height = 480;
+			windowInfo.bounds.x = 0;
+			windowInfo.bounds.y = 0;
+			windowInfo.bounds.width = 640;
+			windowInfo.bounds.height = 480;
 			browser->GetHost()->ShowDevTools(windowInfo, new DevToolsClient(), CefBrowserSettings(), { 0, 0 });
 		}
 	}
@@ -851,7 +857,7 @@ public:
 			mouse.y = y;
 			mouse.modifiers = 0;
 			
-			cef_mouse_button_type_t ctype;
+			cef_mouse_button_type_t ctype{};
 			switch (button)
 			{
 				case MouseButton::Middle: ctype = MBT_MIDDLE; break;
@@ -1197,7 +1203,8 @@ shared_ptr<Layer> create_web_layer(
 	}
 
 	CefRefPtr<WebView> view(new WebView(
-			name, device, width, height, 
+			name, device, 
+			width, height, 
 			window_info.shared_texture_enabled, 
 			window_info.external_begin_frame_enabled));
 
@@ -1206,6 +1213,7 @@ shared_ptr<Layer> create_web_layer(
 			view, 
 			url, 
 			settings, 
+			nullptr,
 			nullptr);
 
 	return create_web_layer(device, want_input, view);
@@ -1226,7 +1234,7 @@ shared_ptr<Layer> create_popup_layer(
 //
 int cef_initialize(HINSTANCE instance)
 {
-	CefEnableHighDPISupport();
+	//CefEnableHighDPISupport();
 
 	{ // check first if we need to run as a worker process
 
