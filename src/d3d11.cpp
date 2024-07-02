@@ -198,8 +198,24 @@ namespace d3d11 {
 		// todo: handle offset
 		d3d11_ctx->Draw(vertices_, 0);
 	}
-
 	
+	Texture2D::Texture2D(
+		ID3D11Texture2D* tex,
+		ID3D11ShaderResourceView* srv,
+		void* handle)
+		: texture_(to_com_ptr(tex))
+		, srv_(to_com_ptr(srv))
+		, share_handle_(handle)
+	{
+		share_handle_ = handle;
+
+		// are we using a keyed mutex?
+		IDXGIKeyedMutex* mutex = nullptr;
+		if (SUCCEEDED(texture_->QueryInterface(__uuidof(IDXGIKeyedMutex), (void**)&mutex))) {
+			keyed_mutex_ = to_com_ptr(mutex);
+		}
+	}
+
 	Texture2D::Texture2D(
 		ID3D11Texture2D* tex,
 		ID3D11ShaderResourceView* srv)
@@ -208,9 +224,8 @@ namespace d3d11 {
 	{
 		share_handle_ = nullptr;
 
-		IDXGIResource* res = nullptr;
-		if (SUCCEEDED(texture_->QueryInterface(
-			__uuidof(IDXGIResource), reinterpret_cast<void**>(&res))))
+		IDXGIResource1* res = nullptr;
+		if (SUCCEEDED(texture_->QueryInterface(__uuidof(IDXGIResource1), reinterpret_cast<void**>(&res))))
 		{
 			res->GetSharedHandle(&share_handle_);
 			res->Release();
@@ -576,7 +591,6 @@ namespace d3d11 {
 	shared_ptr<Texture2D> Device::open_shared_texture(void* handle)
 	{
 		ID3D11Texture2D* tex = nullptr;
-		//auto hr = device_->OpenSharedResource(handle, __uuidof(ID3D11Texture2D), (void**)(&tex));
 		auto hr = device_->OpenSharedResource1(handle, __uuidof(ID3D11Texture2D), (void**)(&tex));
 		if (FAILED(hr)) {
 			return nullptr;
@@ -603,7 +617,7 @@ namespace d3d11 {
 			}
 		}
 		
-		return make_shared<Texture2D>(tex, srv);
+		return make_shared<Texture2D>(tex, srv, handle);
 	}
 
 	shared_ptr<Texture2D> Device::create_texture(
